@@ -48,9 +48,9 @@ class Tx:
                 return False
             total_out = total_out + amount
 
-        if total_out > total_in:
+        # if total_out > total_in:
             #print("Outputs exceed inputs")
-            return False
+        #   return False
         
         return True
     def __gather(self):
