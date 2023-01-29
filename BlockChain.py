@@ -25,6 +25,12 @@ class CBlock:
         digest.update(bytes(str(self.data), 'utf8'))
         digest.update(bytes(str(self.previousHash), 'utf8'))
         return digest.finalize()
+    
+    def is_valid(self):
+        if self.previousBlock is None:
+            return True
+        return self.previousBlock.computeHash() == self.previousHash
+
 
 class CBlockTest(unittest.TestCase):
     def test_compute_hash(self):
