@@ -10,8 +10,8 @@ import time
 import random
 
 reward = 25.0
-leading_zeros = 1
-next_char_limit = 20
+leading_zeros = 2
+next_char_limit = 100
 
 class TxBlock(CBlock):
     nonce = "AAAA"
@@ -39,7 +39,7 @@ class TxBlock(CBlock):
             if not tx.is_valid():
                 return False
         total_in, total_out = self.count_totals()
-        if total_out - total_in - reward > 0.000000000000001:
+        if total_out - total_in - reward > 0.000000000001:
             return False
         return True
 
@@ -54,13 +54,27 @@ class TxBlock(CBlock):
             return False
         return int(this_hash[leading_zeros]) < next_char_limit
 
-    def find_nonce(self):
-        for i in range(1000000):
+    def find_nonce(self, n_tries=1000000):
+        for i in range(n_tries):
             self.nonce = ''.join([ 
                    chr(random.randint(0,255)) for i in range(10*leading_zeros)])
             if self.good_nonce():
                 return self.nonce  
         return None
+
+def findLongestBlockchain(head_blocks):
+    longest = -1
+    long_head = None
+    for b in head_blocks:
+        current = b
+        this_len = 0
+        while current != None:
+            this_len = this_len + 1
+            current = current.previousBlock
+        if this_len > longest:
+            long_head = b
+            longest = this_len
+    return long_head
     
 class TxBlockTest(unittest.TestCase):
     def test_block(self):

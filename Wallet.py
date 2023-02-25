@@ -1,61 +1,151 @@
 import unittest
+import pickle
+import time
+import threading
+from Miner import minerServer, nonceFinder
+from Miner import StopAll as StopAllMiner
+from TxBlock import TxBlock, findLongestBlockchain
 from Transaction import Tx
-from Signatures import generate_keys
+from Signatures import generate_keys, loadPublic, loadPrivate
 from SocketUtils import recvObj, sendObj, newServerConnection
 
 head_blocks = [None]
+wallets = [('localhost',5006)]
+miners = [('localhost',5005)]
+break_now = False
+verbose = False
 
-pr1,pu1 = generate_keys()
-pr2,pu2 = generate_keys()
-pr3,pu3 = generate_keys()
+def StopAll():
+    global brea
+    break_now = True
 
-Tx1 = Tx()
-Tx2 = Tx()
+def getBalance(pu_key):
+    long_chain = findLongestBlockchain(head_blocks)
+    this_block = long_chain
+    bal = 0.0
+    while this_block != None:
+        for tx in this_block.data:
+            for addr,amt in tx.inputs:
+                if addr == pu_key:
+                    bal = bal - amt
+            for addr,amt in tx.outputs:
+                if addr == pu_key:
+                    bal = bal + amt
+        this_block = this_block.previousBlock
+    return bal
 
-Tx1.add_input(pu1, 4.0)
-Tx1.add_input(pu2, 1.0)
-Tx1.add_input(pu3, 4.8)
-Tx2.add_input(pu3, 4.0)
-Tx2.add_output(pu2, 4.0)
-Tx2.add_reqd(pu1)
+def sendCoins(pu_send, amt_send, pr_send, pu_recv, amt_recv, miner_list):
+    newTx = Tx()
+    newTx.add_input(pu_send, amt_send)
+    newTx.add_output(pu_recv, amt_recv)
+    newTx.sign(pr_send)    
+    sendObj('localhost',newTx)
+    return True
 
-Tx1.sign(pr1)
-Tx1.sign(pr2)
-Tx2.sign(pr3)
-Tx2.sign(pr1)
+def walletServer(my_addr):
+    global head_blocks
+    head_blocks = [None]
+    server = newServerConnection('localhost',5006)
+    while not break_now:
+        newBlock = recvObj(server)
+        if isinstance(newBlock, TxBlock):
+            if verbose: print("Rec'd block")
+            for b in head_blocks:
+                if b == None:
+                    if newBlock.previousHash == None:
+                        newBlock.previousBlock = b
+                        if not newBlock.is_valid():
+                            if verbose: print("Error! newBlock is not valid")
+                        else:
+                            head_blocks.remove(b)
+                            head_blocks.append(newBlock)
+                            if verbose: print("Added to head_blocks")
+                elif newBlock.previousHash == b.computeHash():
+                    newBlock.previousBlock = b
+                    if not newBlock.is_valid():
+                        print("Error! newBlock is not valid")
+                    else:
+                        head_blocks.remove(b)
+                        head_blocks.append(newBlock)
+                        print("Added to head_blocks")
+                #TODO What if I add to an earlier (non-head) block?
+    server.close()
+    return True
 
+def loadKeys(pr_file, pu_file):
+    return loadPrivate(pr_file), loadPublic(pu_file)
+
+def saveBlocks(block_list, filename):
+    fp = open(filename, "wb")
+    pickle.dump(block_list, fp)
+    fp.close()
+    return True
+
+def loadBlocks(filename):
+    fin = open(filename, "rb")
+    ret = pickle.load(fin)
+    fin.close()
+    return ret
 
 class TransactionTest(unittest.TestCase):
     def test(self):
-        try:
-            sendObj('localhost',Tx1)
-            sendObj('localhost',Tx2)
-        except:
-            print ("Error! Connection unsuccessful")
-        server = newServerConnection('localhost', 5006)
-        for i in range(10):
-            newBlock = recvObj(server)
-            if newBlock:
-                break
-        server.close()
-            
-        self.assertTrue(newBlock.is_valid(), "This block must be valid")
-        self.assertTrue(newBlock.good_nonce(), "This nonce must be valid")
+        miner_pr, miner_pu = generate_keys()
+        t1 = threading.Thread(target=minerServer, args=(('localhost',5005),))
+        t2 = threading.Thread(target=nonceFinder, args=(wallets, miner_pu))
+        t3 = threading.Thread(target=walletServer, args=(('localhost',5006),))
+        t1.start()
+        t2.start()
+        t3.start()
 
-        for tx in newBlock.data:
-            try:
-                if tx.inputs[0][0] == pu1 and tx.inputs[0][1] == 4.0:
-                    print("Tx1 is present")
-                if tx.inputs[0][0] == pu3 and tx.inputs[0][1] == 4.0:
-                    print("Tx2 is present")
-            except:
-                print("Something went terribly wrong")
+        pr1,pu1 = loadKeys("private.key", "public.key")
+        pr2,pu2 = generate_keys()
+        pr3,pu3 = generate_keys()
 
-        for b in head_blocks:
-            if newBlock.previousHash == b.computeHash():
-                newBlock.previousBlock = b
-                head_blocks.remove(b)
-                head_blocks.append(newBlock)
+        #Query balances
+        bal1 = getBalance(pu1)   
+        bal2 = getBalance(pu2)
+        bal3 = getBalance(pu3)
+
+        #Send coins
+        sendCoins(pu1, 1.0, pr1, pu2, 1.0, miners)
+        sendCoins(pu1, 1.0, pr1, pu3, 0.3, miners)
+
+        time.sleep(30)
+
+        # Save/Load all blocks
+        global head_blocks
+        saveBlocks(head_blocks, "AllBlocks.dat")
+        head_blocks=loadBlocks("AllBlocks.dat")
+
+
+        #Query balances
+        new1 = getBalance(pu1)
+        new2 = getBalance(pu2)
+        new3 = getBalance(pu3)
+
+        #Verify balances
+        if abs(new1-bal1+2.0) > 0.00000001:
+            print("Error! Wrong balance for pu1")
+        else:
+            print("Success. Good balance for pu1")
+        if abs(new2-bal2-1.0) > 0.00000001:
+            print("Error! Wrong balance for pu2")
+        else:
+            print("Success. Good balance for pu2")
+        if abs(new3-bal3-0.3) > 0.00000001:
+            print("Error! Wrong balance for pu3")
+        else:
+            print("Success. Good balance for pu3")
+
+        StopAllMiner()
+        StopAll()
+        
+        t1.join()
+        t2.join()
+        t3.join()
+
+    print ("Exit successful.")
+
 
 if __name__ == "__main__":
     unittest.main()

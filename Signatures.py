@@ -54,15 +54,67 @@ def verify(message, sig, pu_ser):
         print("Error executing public_key.verify")
         return False
 
+def savePrivate(pr_key, filename):
+    return True
+def loadPrivate(filename):
+    pr_key, pu_key = generate_keys()
+    return pr_key
+def savePublic(pu_key, filename):
+    return True
+def loadPublic(filename):
+    pr_key, pu_key = generate_keys()
+    return pu_key
+
 
 if __name__ == "__main__":
-    pr, pu = generate_keys()
+   pr,pu = generate_keys()
+   print(pr)
+   print(pu)
+   message = "This is a secret message"
+   sig = sign(message, pr)
+   print(sig)
+   correct = verify(message, sig, pu)
+   print(correct)
 
-    message = b"PogCoin is the best cryptocurrency in the entire world"
-    sig = sign(message, pr)
-    correct = verify(message, sig, pu)
+   if correct:
+       print("Success! Good sig")
+   else:
+       print ("ERROR! Signature is bad")
 
-    if correct:
-        print("Success! Good sign")
-    else:
-        print("ERROR: Signature is bad")
+   pr2, pu2 = generate_keys()
+
+   sig2 = sign(message, pr2)
+
+   correct= verify(message, sig2, pu)
+   if correct:
+       print("ERROR! Bad signature checks out!")
+   else:
+       print("Success! Bad sig detected")
+
+   badmess = message + "Q"
+   correct= verify(badmess, sig, pu)
+   if correct:
+       print("ERROR! Tampered message checks out!")
+   else:
+       print("Success! Tampering detected")
+
+   savePrivate(pr2, "private.key")
+   pr_load = loadPrivate("private.key")
+   sig3 = sign(message, pr_load)
+   correct = verify(message, sig3, pu2)
+   if correct:
+       print("Success! Good loaded private key")
+   else:
+       print ("ERROR! Load private key is bad")
+
+   savePublic(pu2, "public.key")
+   pu_load = loadPublic("public.key")
+
+   correct = verify(message, sig3, pu_load)
+   if correct:
+       print("Success! Good loaded public key")
+   else:
+       print ("ERROR! Load public key is bad") 
+
+
+
