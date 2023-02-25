@@ -4,7 +4,7 @@ import time
 import threading
 from SocketUtils import newServerConnection, recvObj, sendObj
 from Transaction import Tx
-from TxBlock import TxBlock, findLongestBlockchain
+from TxBlock import TxBlock, findLongestBlockchain, loadBlocks, saveBlocks
 from Signatures import generate_keys
 
 wallets = [('localhost', 5006)]
@@ -20,19 +20,33 @@ def StopAll():
 def minerServer(my_addr):
     global tx_list
     global break_now
+    try:
+        tx_list = loadTxList("Txs.dat")
+        if verbose: print("Loaded tx_list has " + str(len(tx_list)) + " Txs.")
+    except:
+        print("No previous Txs. Starting fresh")
+        tx_list = []
     head_blocks=[None]
     my_ip, my_port = my_addr
-    server = newServerConnection(my_ip, my_port)
+    server = newServerConnection(my_ip,my_port)
     # Get Txs from wallets
     while not break_now:
         newTx = recvObj(server)
         if isinstance(newTx,Tx):
             tx_list.append(newTx)
             if verbose: print ("Recd tx")
+    if verbose: print ("Saving " + str(len(tx_list)) + " txs to Txs.dat")
+    saveTxList(tx_list,"Txs.dat")
+    
     return False
 
 def nonceFinder(wallet_list, miner_public):
     global break_now
+    try:
+        head_blocks = loadBlocks("AllBlocks.dat")
+    except:
+        print("No previous blocks found. Starting fresh.")
+        head_blocks = [None]
     # add Txs to new block
     while not break_now:
         newBlock = TxBlock(findLongestBlockchain(head_blocks))
@@ -48,6 +62,8 @@ def nonceFinder(wallet_list, miner_public):
         newBlock.find_nonce(10000)
         if newBlock.good_nonce():
             if verbose: print ("Good nonce found")
+            head_blocks.remove(newBlock.previousBlock)
+            head_blocks.append(newBlock)
             # Send new block
             savePrev = newBlock.previousBlock
             newBlock.previousBlock = None
@@ -59,6 +75,7 @@ def nonceFinder(wallet_list, miner_public):
             for tx in newBlock.data:
                 if tx != mine_reward:
                     tx_list.remove(tx)
+    saveBlocks(head_blocks,"AllBlocks.dat")                
     return True
 
 def loadTxList(filename):

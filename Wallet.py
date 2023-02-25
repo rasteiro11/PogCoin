@@ -3,20 +3,24 @@ import pickle
 import time
 import threading
 from Miner import minerServer, nonceFinder
-from Miner import StopAll as StopAllMiner
-from TxBlock import TxBlock, findLongestBlockchain
+import Miner
+from TxBlock import TxBlock, findLongestBlockchain, loadBlocks, saveBlocks
 from Transaction import Tx
-from Signatures import generate_keys, loadPublic, loadPrivate
+from Signatures import generate_keys, loadPublic, loadPrivate, loadKeys
 from SocketUtils import recvObj, sendObj, newServerConnection
 
+my_pu = None
+my_pr = None
 head_blocks = [None]
 wallets = [('localhost',5006)]
 miners = [('localhost',5005)]
 break_now = False
-verbose = False
+verbose = True
+
+my_pu, my_pr = loadKeys("private.key", "public.key")
 
 def StopAll():
-    global brea
+    global break_now
     break_now = True
 
 def getBalance(pu_key):
@@ -44,7 +48,11 @@ def sendCoins(pu_send, amt_send, pr_send, pu_recv, amt_recv, miner_list):
 
 def walletServer(my_addr):
     global head_blocks
-    head_blocks = [None]
+    try:
+        head_blocks = loadBlocks("WalletBlocks.dat")
+    except:
+        print("WS: No previous blocks found. Starting fresh.")
+        head_blocks = [None]
     server = newServerConnection('localhost',5006)
     while not break_now:
         newBlock = recvObj(server)
@@ -69,23 +77,9 @@ def walletServer(my_addr):
                         head_blocks.append(newBlock)
                         print("Added to head_blocks")
                 #TODO What if I add to an earlier (non-head) block?
+    saveBlocks(head_blocks, "WalletBlocks.dat")
     server.close()
     return True
-
-def loadKeys(pr_file, pu_file):
-    return loadPrivate(pr_file), loadPublic(pu_file)
-
-def saveBlocks(block_list, filename):
-    fp = open(filename, "wb")
-    pickle.dump(block_list, fp)
-    fp.close()
-    return True
-
-def loadBlocks(filename):
-    fin = open(filename, "rb")
-    ret = pickle.load(fin)
-    fin.close()
-    return ret
 
 class TransactionTest(unittest.TestCase):
     def test(self):
@@ -137,7 +131,7 @@ class TransactionTest(unittest.TestCase):
         else:
             print("Success. Good balance for pu3")
 
-        StopAllMiner()
+        Miner.StopAll()
         StopAll()
         
         t1.join()

@@ -75,6 +75,18 @@ def findLongestBlockchain(head_blocks):
             long_head = b
             longest = this_len
     return long_head
+
+def saveBlocks(block_list, filename):
+    fp = open(filename, "wb")
+    pickle.dump(block_list, fp)
+    fp.close()
+    return True
+
+def loadBlocks(filename):
+    fin = open(filename, "rb")
+    ret = pickle.load(fin)
+    fin.close()
+    return ret
     
 class TxBlockTest(unittest.TestCase):
     def test_block(self):
