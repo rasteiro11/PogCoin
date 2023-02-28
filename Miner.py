@@ -50,8 +50,17 @@ def nonceFinder(wallet_list, miner_public):
     # add Txs to new block
     while not break_now:
         newBlock = TxBlock(findLongestBlockchain(head_blocks))
+        placeholder = Tx()
+        placeholder.add_output(miner_public, 25.0)
+        newBlock.addTx(placeholder)
+        # TODO sort tx_list by tx fee per byte
         for tx in tx_list:
             newBlock.addTx(tx)
+            if not newBlock.check_size():
+                newBlock.removeTx(tx)
+                break
+        newBlock.removeTx(placeholder)
+        if verbose: print("new block has ", str(len(newBlock.data)) + " txs.")
         # Compute and add mining reward
         total_in,total_out = newBlock.count_totals()
         mine_reward = Tx()
