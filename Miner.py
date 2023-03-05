@@ -2,10 +2,10 @@ import unittest
 import pickle
 import time
 import threading
-from SocketUtils import newServerConnection, recvObj, sendObj
-from Transaction import Tx
-from TxBlock import TxBlock, findLongestBlockchain, loadBlocks, saveBlocks
-from Signatures import generate_keys
+import SocketUtils
+import Transactions
+import Signatures
+import TxBlock
 
 wallets = [('localhost', 5006)]
 tx_list = []
@@ -28,11 +28,11 @@ def minerServer(my_addr):
         tx_list = []
     head_blocks=[None]
     my_ip, my_port = my_addr
-    server = newServerConnection(my_ip,my_port)
+    server = SocketUtils.newServerConnection(my_ip,my_port)
     # Get Txs from wallets
     while not break_now:
-        newTx = recvObj(server)
-        if isinstance(newTx,Tx):
+        newTx = SocketUtils.recvObj(server)
+        if isinstance(newTx,Transactions.Tx):
             tx_list.append(newTx)
             if verbose: print ("Recd tx")
     if verbose: print ("Saving " + str(len(tx_list)) + " txs to Txs.dat")
@@ -43,27 +43,28 @@ def minerServer(my_addr):
 def nonceFinder(wallet_list, miner_public):
     global break_now
     try:
-        head_blocks = loadBlocks("AllBlocks.dat")
+        head_blocks = TxBlock.loadBlocks("AllBlocks.dat")
     except:
         print("No previous blocks found. Starting fresh.")
-        head_blocks = [None]
+        print("STARTING FRESH GAMER")
+        head_blocks = TxBlock.loadBlocks("Genesis.dat")
     # add Txs to new block
     while not break_now:
-        newBlock = TxBlock(findLongestBlockchain(head_blocks))
-        placeholder = Tx()
-        placeholder.add_output(miner_public, 25.0)
+        newBlock = TxBlock.TxBlock(TxBlock.findLongestBlockchain(head_blocks))
+        placeholder = Transactions.Tx()
+        placeholder.add_output(miner_public,25.0)
         newBlock.addTx(placeholder)
-        # TODO sort tx_list by tx fee per byte
+        #TODO sort tx_list by tx fee per byte
         for tx in tx_list:
             newBlock.addTx(tx)
             if not newBlock.check_size():
                 newBlock.removeTx(tx)
                 break
         newBlock.removeTx(placeholder)
-        if verbose: print("new block has ", str(len(newBlock.data)) + " txs.")
+        if verbose: print("new block has " + str(len(newBlock.data)) + " txs.")
         # Compute and add mining reward
         total_in,total_out = newBlock.count_totals()
-        mine_reward = Tx()
+        mine_reward = Transactions.Tx()
         mine_reward.add_output(miner_public,25.0+total_in-total_out)
         newBlock.addTx(mine_reward)
         # Find nonce
@@ -78,13 +79,13 @@ def nonceFinder(wallet_list, miner_public):
             newBlock.previousBlock = None
             for ip_addr,port in wallet_list:
                 if verbose: print ("Sending to " + ip_addr + ":" + str(port))
-                sendObj(ip_addr,newBlock,5006)
+                SocketUtils.sendObj(ip_addr,newBlock,5006)
             newBlock.previousBlock = savePrev
             # Remove used txs from tx_list
             for tx in newBlock.data:
                 if tx != mine_reward:
                     tx_list.remove(tx)
-    saveBlocks(head_blocks,"AllBlocks.dat")                
+    TxBlock.saveBlocks(head_blocks,"AllBlocks.dat")                
     return True
 
 def loadTxList(filename):
@@ -101,19 +102,19 @@ def saveTxList(the_list, filename):
 
 class TestMiner(unittest.TestCase):
     def test(self):
-        my_pr, my_pu = generate_keys()
-        t1 = threading.Thread(target=minerServer, args=(('localhost', 5005), ))
+        my_pr, my_pu = Signatures.generate_keys()
+        t1 = threading.Thread(target=minerServer, args=(('localhost',5005),))
         t2 = threading.Thread(target=nonceFinder, args=(wallets, my_pu))
-        server = newServerConnection('localhost', port=5006)
+        server = SocketUtils.newServerConnection('localhost',5006)
         t1.start()
         t2.start()
-        pr1,pu1 = generate_keys()
-        pr2,pu2 = generate_keys()
-        pr3,pu3 = generate_keys()
-        
-        Tx1 = Tx()
-        Tx2 = Tx()
-        
+        pr1,pu1 = Signatures.generate_keys()
+        pr2,pu2 = Signatures.generate_keys()
+        pr3,pu3 = Signatures.generate_keys()
+
+        Tx1 = Transactions.Tx()
+        Tx2 = Transactions.Tx()
+
         Tx1.add_input(pu1, 4.0)
         Tx1.add_input(pu2, 1.0)
         Tx1.add_output(pu3, 4.8)
@@ -129,26 +130,24 @@ class TestMiner(unittest.TestCase):
         new_tx_list = [Tx1, Tx2]
         saveTxList(new_tx_list, "Txs.dat")
         new_new_tx_list = loadTxList("Txs.dat")
+        
 
         for tx in new_new_tx_list:
             try:
-                sendObj('localhost', tx)
-                print("Sent tx")
+                SocketUtils.sendObj('localhost',tx)
+                print ("Sent Tx")
             except:
-                print("Error COnnection unsuccessful")
-        
-        for i in range(30):
-            newBlock = recvObj(server)
+                print ("Error! Connection unsuccessful")
+
+        for _ in range(30):
+            newBlock = SocketUtils.recvObj(server)
             if newBlock:
                 break
+
         if newBlock.is_valid():
             print("Success! Block is valid")
         if newBlock.good_nonce():
             print("Success! Nonce is valid")
-            
-        # self.assertTrue(newBlock.is_valid(), "This block must be valid")
-        # self.assertTrue(newBlock.good_nonce(), "This nonce must be valid")
-
         for tx in newBlock.data:
             try:
                 if tx.inputs[0][0] == pu1 and tx.inputs[0][1] == 4.0:
@@ -160,14 +159,17 @@ class TestMiner(unittest.TestCase):
                     print("Tx2 is present")
             except:
                 pass
+
         time.sleep(20)
-        break_now = True
-        time.sleep(3)
+        break_now=True
+        time.sleep(2)
+        server.close()
 
         t1.join()
         t2.join()
 
-        print("Done !")
+        print("Done!")
+    
 
 if __name__ == "__main__":
    unittest.main() 

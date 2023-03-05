@@ -1,6 +1,4 @@
-from Signatures import generate_keys, savePublic, loadPublic, loadKeys
-from Wallet import my_pu, my_pr, walletServer, loadKeys
-from Miner import minerServer, nonceFinder
+import Signatures
 import time
 import threading
 import Wallet
@@ -21,13 +19,13 @@ def startMiner():
     global tMS, tNF
     
     try:
-        Wallet.my_pu = loadPublic("public.key")
+        my_pu = Signatures.loadPublic("public.key")
     except:
         print("No public.key. Need to generate?")
         pass # THINK
 
-    tMS = threading.Thread(target=minerServer, args=((my_ip, 5005), ))
-    tNF = threading.Thread(target=nonceFinder, args=(wallets, Wallet.my_pu))
+    tMS = threading.Thread(target=Miner.minerServer, args=((my_ip, 5005), ))
+    tNF = threading.Thread(target=Miner.nonceFinder, args=(wallets, my_pu))
     
     tMS.start()
     tNF.start()
@@ -35,8 +33,8 @@ def startMiner():
 
 def startWallet():
     global tWS
-    Wallet.my_pr, Wallet.my_pu = loadKeys("private.key", "public.key")
-    tWS = threading.Thread(target=walletServer, args=((my_ip, 5006),))
+    Wallet.my_pr, Wallet.my_pu = Signatures.loadKeys("private.key", "public.key")
+    tWS = threading.Thread(target=Wallet.walletServer, args=((my_ip, 5006),))
     tWS.start()
     return True
 
@@ -77,7 +75,7 @@ def printBalances(other_public, my_public):
         time.sleep(5)
 
 def makeNewKeys():
-    return None, None
+    return Signatures.generate_keys()
 
 if __name__ == "__main__":
     startMiner()
@@ -87,14 +85,16 @@ if __name__ == "__main__":
     
     time.sleep(2)
     
+    print("Balance: " +str(getBalance(Wallet.my_pu)))
+
     sendCoins(other_public, 1.0, 0.1)
     
     time.sleep(20)
-    
-    t = threading.Thread(target=printBalances, args=(other_public, Wallet.my_pu))
-    t.start()
 
-    time.sleep(20)
+    print(getBalance(other_public))
+    print(getBalance(Wallet.my_pu))
+
+    time.sleep(1)
     stopWallet()
     stopMiner()
 

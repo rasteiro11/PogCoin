@@ -1,5 +1,5 @@
 from BlockChain import CBlock
-from Transaction import Tx
+from Transactions import Tx
 from Signatures import generate_keys, sign, verify
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
@@ -12,6 +12,7 @@ import random
 reward = 25.0
 leading_zeros = 2
 next_char_limit = 100
+verbose = True
 
 class TxBlock(CBlock):
     nonce = "AAAA"
@@ -50,15 +51,31 @@ class TxBlock(CBlock):
     def is_valid(self):
         if not super(TxBlock, self).is_valid():
             return False
+        spends={}
         for tx in self.data:
             if not tx.is_valid():
                 return False
+            for addr,amt in tx.inputs:
+                if addr in spends:
+                    spends[addr] = spends[addr] + amt
+                else:
+                    spends[addr] = amt
+            for addr,amt in tx.outputs:
+                if addr in spends:
+                    spends[addr] = spends[addr] - amt
+                else:
+                    spends[addr] = -amt
+        for this_addr in spends:
+            if verbose: print ("Balance: " + str(getBalance(this_addr,self.previousBlock)))
+            if verbose: print ("Spends: " + str(spends[this_addr]))
+            if spends[this_addr] - getBalance(this_addr,self.previousBlock) > 0.000000001:
+                return False
+            
         total_in, total_out = self.count_totals()
         if total_out - total_in - reward > 0.000000000001:
             return False
         if not self.check_size():
             return False
-
         return True
 
     def good_nonce(self):
@@ -105,13 +122,26 @@ def loadBlocks(filename):
     ret = pickle.load(fin)
     fin.close()
     return ret
+
+def getBalance(pu_key,last_block):
+    this_block = last_block
+    bal = 0.0
+    while this_block != None:
+        for tx in this_block.data:
+            for addr,amt in tx.inputs:
+                if addr == pu_key:
+                    bal = bal - amt
+            for addr,amt in tx.outputs:
+                if addr == pu_key:
+                    bal = bal + amt
+        this_block = this_block.previousBlock
+    return bal
     
 class TxBlockTest(unittest.TestCase):
     def test_block(self):
         pr1, pu1 = generate_keys()
         pr2, pu2 = generate_keys()
         pr3, pu3 = generate_keys()
-        pr4, pu4 = generate_keys()
 
         Tx1 = Tx()
         Tx1.add_input(pu1, 1)
@@ -193,12 +223,13 @@ class TxBlockTest(unittest.TestCase):
             self.assertFalse(b.is_valid(), "This Blocks should be invalid")
 
         # Test mining rewards and tx fees
-        B3 = TxBlock(B2)
+        pr4, pu4 = generate_keys()
+        B3 = TxBlock(B1)
         B3.addTx(Tx2)
         B3.addTx(Tx3)
         B3.addTx(Tx4)
         Tx6 = Tx()
-        Tx6.add_output(pu4, 25)
+        Tx6.add_output(pu4,25)
         B3.addTx(Tx6)
         self.assertTrue(B3.is_valid(), "Block reward failed")
 
