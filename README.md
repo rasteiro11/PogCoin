@@ -1,6 +1,8 @@
 # PogCoin™
 
 A cryptocurrency written in python
+
+```
  ________________________                         _________________________
 |                         |                       |                        |<br>
 |         Miner           |                       |         Wallet         |<br>
@@ -16,7 +18,7 @@ A cryptocurrency written in python
 |                         |                       |             \ _ _ |___||<br>       
 |                         |                       |                        |<br>
 |_________________________|                       |________________________|<br>
-
+```
 - Features
   - mine blocks and receive rewards
   - sync miners
