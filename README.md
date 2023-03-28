@@ -1,6 +1,6 @@
 # PogCoin™
 
-A cryptocurrency written in python
+A proof of work cryptocurrency written in python
 
 ```
  ________________________                         _________________________
